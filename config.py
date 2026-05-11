@@ -2,12 +2,12 @@
 #  EDIT THESE VALUES BEFORE RUNNING THE AGENT
 # ─────────────────────────────────────────────
 
-SEARCH_CITY       = "YOUR_CITY_HERE"    # e.g. "Cincinnati"
-SEARCH_STATE      = "YOUR_STATE_HERE"   # e.g. "Ohio"
+SEARCH_CITY       = "San Ramon"    # e.g. "Cincinnati"
+SEARCH_STATE      = "California"   # e.g. "Ohio"
 SEARCH_COUNTRY    = "US"                # ISO country code
 
 # Radius (in meters) around the city center to search
-SEARCH_RADIUS_M   = 10_000             # 10 km  — increase for larger areas
+SEARCH_RADIUS_M   = 1000             # 10 km  — increase for larger areas
 
 # Minimum number of businesses the agent must find before it finishes
 MIN_BUSINESSES    = 10
