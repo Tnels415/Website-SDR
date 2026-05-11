@@ -9,18 +9,30 @@ from typing import Optional
 
 EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
 
-# Domains we want to ignore when extracting emails
 JUNK_EMAIL_DOMAINS = {
     "example.com", "sentry.io", "wix.com", "squarespace.com",
     "wordpress.com", "godaddy.com", "domain.com", "yourcompany.com",
     "email.com", "test.com", "placeholder.com",
 }
 
-try:
-    from duckduckgo_search import DDGS
-    DDGS_AVAILABLE = True
-except ImportError:
-    DDGS_AVAILABLE = False
+# Stop enrichment after this many consecutive DDG failures
+_MAX_CONSECUTIVE_FAILURES = 3
+_ddg_available: Optional[bool] = None  # None = not yet tested
+
+
+def _check_ddg() -> bool:
+    """Return True if duckduckgo-search is installed and working."""
+    global _ddg_available
+    if _ddg_available is not None:
+        return _ddg_available
+    try:
+        from duckduckgo_search import DDGS  # noqa: F401
+        _ddg_available = True
+    except ImportError:
+        print("[enrich] duckduckgo-search is not installed — skipping enrichment.")
+        print("         Run:  pip3 install duckduckgo-search")
+        _ddg_available = False
+    return _ddg_available
 
 
 def _clean_email(raw: str) -> Optional[str]:
@@ -45,72 +57,85 @@ def _extract_emails_from_text(text: str) -> list[str]:
 
 def _ddg_search(query: str, max_results: int = 5) -> list[dict]:
     """Run a DuckDuckGo text search; return list of result dicts."""
-    if not DDGS_AVAILABLE:
+    if not _check_ddg():
         return []
     try:
+        from duckduckgo_search import DDGS
+        # Support both old (positional) and new (keyword) API styles
         with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=max_results))
+            results = list(ddgs.text(keywords=query, max_results=max_results))
         return results
-    except Exception as e:
-        print(f"[enrich] DDG search failed for '{query}': {e}")
+    except TypeError:
+        # Older API used positional arg, not `keywords=`
+        try:
+            from duckduckgo_search import DDGS
+            with DDGS() as ddgs:
+                results = list(ddgs.text(query, max_results=max_results))
+            return results
+        except Exception:
+            return []
+    except Exception:
         return []
-
-
-def enrich_business(biz: dict, city: str, state: str) -> dict:
-    """
-    Attempt to find email and description for a business via web search.
-    Modifies the business dict in-place and returns it.
-    """
-    if not DDGS_AVAILABLE:
-        return biz
-
-    name = biz["name"]
-    location = f"{city}, {state}"
-    print(f"[enrich] {name} …")
-
-    # --- Try to find an email address ---
-    if not biz.get("email"):
-        queries = [
-            f'"{name}" {location} email contact',
-            f'"{name}" {location} phone email',
-        ]
-        for q in queries:
-            results = _ddg_search(q, max_results=5)
-            for r in results:
-                combined = (r.get("title", "") + " " + r.get("body", ""))
-                emails = _extract_emails_from_text(combined)
-                if emails:
-                    biz["email"] = emails[0]
-                    break
-            if biz.get("email"):
-                break
-            time.sleep(0.4)   # polite delay
-
-    # --- Build a short description if we don't have one ---
-    if not biz.get("description"):
-        results = _ddg_search(f'"{name}" {location}', max_results=3)
-        if results:
-            snippet = results[0].get("body", "")
-            if snippet:
-                # Trim to a couple of sentences
-                sentences = re.split(r"(?<=[.!?])\s+", snippet)
-                biz["description"] = " ".join(sentences[:2])[:300]
-
-    time.sleep(0.3)
-    return biz
 
 
 def enrich_businesses(businesses: list[dict], city: str, state: str) -> list[dict]:
-    """Enrich a list of businesses, skipping those already enriched."""
-    if not DDGS_AVAILABLE:
-        print(
-            "[enrich] duckduckgo-search is not installed — skipping enrichment.\n"
-            "         Run:  pip install duckduckgo-search"
-        )
+    """
+    Enrich businesses with email and description via DuckDuckGo.
+    Bails out early if DDG is consistently unavailable to avoid log spam.
+    """
+    if not _check_ddg():
         return businesses
 
+    consecutive_failures = 0
+    location = f"{city}, {state}"
+
     for i, biz in enumerate(businesses):
-        print(f"[enrich] ({i+1}/{len(businesses)}) {biz['name']}")
-        enrich_business(biz, city, state)
+        if consecutive_failures >= _MAX_CONSECUTIVE_FAILURES:
+            print(
+                f"[enrich] DuckDuckGo unavailable after {_MAX_CONSECUTIVE_FAILURES} "
+                "consecutive failures — skipping remaining enrichment."
+            )
+            break
+
+        name = biz["name"]
+        print(f"[enrich] ({i+1}/{len(businesses)}) {name} …")
+        got_result = False
+
+        # --- Email ---
+        if not biz.get("email"):
+            for q in [
+                f'"{name}" {location} email contact',
+                f'"{name}" {location} phone email',
+            ]:
+                results = _ddg_search(q, max_results=5)
+                if results:
+                    got_result = True
+                    for r in results:
+                        emails = _extract_emails_from_text(
+                            r.get("title", "") + " " + r.get("body", "")
+                        )
+                        if emails:
+                            biz["email"] = emails[0]
+                            break
+                if biz.get("email"):
+                    break
+                time.sleep(0.4)
+
+        # --- Description ---
+        if not biz.get("description"):
+            results = _ddg_search(f'"{name}" {location}', max_results=3)
+            if results:
+                got_result = True
+                snippet = results[0].get("body", "")
+                if snippet:
+                    sentences = re.split(r"(?<=[.!?])\s+", snippet)
+                    biz["description"] = " ".join(sentences[:2])[:300]
+
+        if got_result:
+            consecutive_failures = 0
+        else:
+            consecutive_failures += 1
+
+        time.sleep(0.3)
 
     return businesses
