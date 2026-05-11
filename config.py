@@ -15,10 +15,3 @@ MIN_BUSINESSES    = 10
 # Output file paths (relative to this directory)
 DATA_FILE         = "businesses.json"
 DASHBOARD_FILE    = "dashboard.html"
-
-# ─────────────────────────────────────────────
-#  ANTHROPIC API KEY
-#  Set via environment variable:  ANTHROPIC_API_KEY=sk-...
-#  or paste it directly below (not recommended for shared repos)
-# ─────────────────────────────────────────────
-ANTHROPIC_API_KEY = None   # leave None to read from env
