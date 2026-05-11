@@ -6,7 +6,11 @@ import requests
 import time
 from typing import Optional
 
-OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+OVERPASS_ENDPOINTS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+]
 
 # OSM tags that indicate a real commercial/service business
 BUSINESS_TAGS = [
@@ -162,19 +166,32 @@ def search_businesses(city: str, state: str, country: str, radius_m: int) -> lis
     query = build_overpass_query(lat, lon, radius_m)
     print(f"[search] Querying Overpass API (radius={radius_m}m)…")
 
-    headers = {"Content-Type": "application/x-www-form-urlencoded"}
-    try:
-        resp = requests.post(
-            OVERPASS_URL,
-            data={"data": query},
-            headers=headers,
-            timeout=90,
-        )
-        resp.raise_for_status()
-    except requests.exceptions.Timeout:
-        raise RuntimeError("Overpass API timed out — try reducing SEARCH_RADIUS_M")
-    except requests.exceptions.RequestException as e:
-        raise RuntimeError(f"Overpass API error: {e}")
+    resp = None
+    last_error = None
+    for endpoint in OVERPASS_ENDPOINTS:
+        try:
+            resp = requests.post(
+                endpoint,
+                data=f"data={requests.utils.quote(query)}",
+                headers={
+                    "Content-Type": "application/x-www-form-urlencoded",
+                    "User-Agent": "LocalBusinessDiscoveryAgent/1.0",
+                },
+                timeout=90,
+            )
+            resp.raise_for_status()
+            print(f"[search] Using Overpass endpoint: {endpoint}")
+            break
+        except requests.exceptions.Timeout:
+            last_error = "timed out"
+            print(f"[search] {endpoint} timed out, trying next…")
+        except requests.exceptions.RequestException as e:
+            last_error = str(e)
+            print(f"[search] {endpoint} failed ({e}), trying next…")
+            resp = None
+
+    if resp is None:
+        raise RuntimeError(f"All Overpass endpoints failed. Last error: {last_error}")
 
     elements = resp.json().get("elements", [])
     print(f"[search] Raw elements returned: {len(elements)}")
