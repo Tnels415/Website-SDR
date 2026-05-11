@@ -24,22 +24,43 @@ SKIP_AMENITY = {
 
 
 def geocode_city(city: str, state: str, country: str) -> Optional[tuple[float, float]]:
-    """Return (lat, lon) for a city using Nominatim."""
-    url = "https://nominatim.openstreetmap.org/search"
-    params = {
-        "q": f"{city}, {state}, {country}",
-        "format": "json",
-        "limit": 1,
-    }
-    headers = {"User-Agent": "LocalBusinessDiscoveryAgent/1.0"}
+    """Return (lat, lon) for a city, trying multiple geocoders."""
+    query = f"{city}, {state}, {country}"
+    headers = {"User-Agent": "LocalBusinessDiscoveryAgent/1.0 (business-finder)"}
+
+    # 1. Photon (Komoot) — permissive, no auth needed
     try:
-        resp = requests.get(url, params=params, headers=headers, timeout=10)
+        resp = requests.get(
+            "https://photon.komoot.io/api/",
+            params={"q": query, "limit": 1},
+            headers=headers,
+            timeout=10,
+        )
+        resp.raise_for_status()
+        features = resp.json().get("features", [])
+        if features:
+            lon, lat = features[0]["geometry"]["coordinates"]
+            print(f"[search] Geocoded via Photon")
+            return float(lat), float(lon)
+    except Exception as e:
+        print(f"[search] Photon geocoding failed: {e}")
+
+    # 2. Nominatim fallback
+    try:
+        resp = requests.get(
+            "https://nominatim.openstreetmap.org/search",
+            params={"q": query, "format": "json", "limit": 1},
+            headers=headers,
+            timeout=10,
+        )
         resp.raise_for_status()
         results = resp.json()
         if results:
+            print(f"[search] Geocoded via Nominatim")
             return float(results[0]["lat"]), float(results[0]["lon"])
     except Exception as e:
-        print(f"[search] Geocoding failed: {e}")
+        print(f"[search] Nominatim geocoding failed: {e}")
+
     return None
 
 
