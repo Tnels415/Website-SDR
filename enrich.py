@@ -1,6 +1,6 @@
 """
 Enrichment layer: use DuckDuckGo (no API key required) to find
-email addresses and a brief description for each business.
+email addresses, phone numbers, and a brief description for each business.
 """
 
 import re
@@ -115,5 +115,9 @@ def enrich_businesses(businesses: list[dict], city: str, state: str) -> list[dic
             consecutive_failures += 1
 
         time.sleep(0.3)
+
+    # --- Phone numbers (dedicated lookup pass) ---
+    from phone_lookup import enrich_phones
+    businesses = enrich_phones(businesses, city, state)
 
     return businesses

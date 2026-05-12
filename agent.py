@@ -83,11 +83,15 @@ def run_agent() -> None:
 
     total = len(merged)
     new_count = total - len(existing)
-    print(
-        f"\nDone!  {total} total businesses "
-        f"({new_count} new this run).  "
-        f"Open {config.DASHBOARD_FILE} in your browser.\n"
-    )
+    with_phone = sum(1 for b in merged.values() if b.get("phone"))
+    with_email = sum(1 for b in merged.values() if b.get("email"))
+
+    print(f"\n{'='*60}")
+    print(f"  Done!  {total} businesses ({new_count} new this run)")
+    print(f"  📞  {with_phone}/{total} have phone numbers ({with_phone*100//total if total else 0}%)")
+    print(f"  ✉️   {with_email}/{total} have email addresses ({with_email*100//total if total else 0}%)")
+    print(f"  Open {config.DASHBOARD_FILE} in your browser")
+    print(f"{'='*60}\n")
 
 
 if __name__ == "__main__":
