@@ -17,22 +17,11 @@ JUNK_EMAIL_DOMAINS = {
 
 # Stop enrichment after this many consecutive DDG failures
 _MAX_CONSECUTIVE_FAILURES = 3
-_ddg_available: Optional[bool] = None  # None = not yet tested
-
-
-def _check_ddg() -> bool:
-    """Return True if duckduckgo-search is installed and working."""
-    global _ddg_available
-    if _ddg_available is not None:
-        return _ddg_available
-    try:
-        from duckduckgo_search import DDGS  # noqa: F401
-        _ddg_available = True
-    except ImportError:
-        print("[enrich] duckduckgo-search is not installed — skipping enrichment.")
-        print("         Run:  pip3 install duckduckgo-search")
-        _ddg_available = False
-    return _ddg_available
+try:
+    from ddgs import DDGS
+    _ddg_available = True
+except ImportError:
+    _ddg_available = False
 
 
 def _clean_email(raw: str) -> Optional[str]:
@@ -57,23 +46,10 @@ def _extract_emails_from_text(text: str) -> list[str]:
 
 def _ddg_search(query: str, max_results: int = 5) -> list[dict]:
     """Run a DuckDuckGo text search; return list of result dicts."""
-    if not _check_ddg():
+    if not _ddg_available:
         return []
     try:
-        from duckduckgo_search import DDGS
-        # Support both old (positional) and new (keyword) API styles
-        with DDGS() as ddgs:
-            results = list(ddgs.text(keywords=query, max_results=max_results))
-        return results
-    except TypeError:
-        # Older API used positional arg, not `keywords=`
-        try:
-            from duckduckgo_search import DDGS
-            with DDGS() as ddgs:
-                results = list(ddgs.text(query, max_results=max_results))
-            return results
-        except Exception:
-            return []
+        return DDGS().text(query, max_results=max_results)
     except Exception:
         return []
 
@@ -83,7 +59,9 @@ def enrich_businesses(businesses: list[dict], city: str, state: str) -> list[dic
     Enrich businesses with email and description via DuckDuckGo.
     Bails out early if DDG is consistently unavailable to avoid log spam.
     """
-    if not _check_ddg():
+    if not _ddg_available:
+        print("[enrich] ddgs is not installed — skipping enrichment.")
+        print("         Run:  pip3 install ddgs")
         return businesses
 
     consecutive_failures = 0
