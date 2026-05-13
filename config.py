@@ -23,7 +23,7 @@ DASHBOARD_FILE    = "dashboard.html"
 #  Paste your key below — this unlocks much richer data
 #  and is the only backend that works on all networks.
 # ─────────────────────────────────────────────
-GOOGLE_PLACES_API_KEY = None   # e.g. "AIzaSy..."
+GOOGLE_PLACES_API_KEY = AIzaSyA_Tor-6fb8EVp6sXICH3h1bj23s1S06fs   # e.g. "AIzaSy..."
 
 # ─────────────────────────────────────────────
 #  OPTIONAL: hardcode your city's coordinates
