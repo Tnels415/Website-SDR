@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Overpass API (OpenStreetMap) search for local businesses without websites.
 """
@@ -32,7 +33,7 @@ def geocode_city(city: str, state: str, country: str) -> Optional[tuple[float, f
     query = f"{city}, {state}, {country}"
     headers = {"User-Agent": "LocalBusinessDiscoveryAgent/1.0 (business-finder)"}
 
-    # 1. Photon (Komoot) — permissive, no auth needed
+    # 1. Photon (Komoot) - permissive, no auth needed
     try:
         resp = requests.get(
             "https://photon.komoot.io/api/",
@@ -161,10 +162,10 @@ def search_businesses(city: str, state: str, country: str, radius_m: int) -> lis
         raise RuntimeError(f"Could not geocode '{city}, {state}'")
 
     lat, lon = coords
-    print(f"[search] Geocoded '{city}' → ({lat:.4f}, {lon:.4f})")
+    print(f"[search] Geocoded '{city}' -> ({lat:.4f}, {lon:.4f})")
 
     query = build_overpass_query(lat, lon, radius_m)
-    print(f"[search] Querying Overpass API (radius={radius_m}m)…")
+    print(f"[search] Querying Overpass API (radius={radius_m}m)...")
 
     resp = None
     last_error = None
@@ -184,10 +185,10 @@ def search_businesses(city: str, state: str, country: str, radius_m: int) -> lis
             break
         except requests.exceptions.Timeout:
             last_error = "timed out"
-            print(f"[search] {endpoint} timed out, trying next…")
+            print(f"[search] {endpoint} timed out, trying next...")
         except requests.exceptions.RequestException as e:
             last_error = str(e)
-            print(f"[search] {endpoint} failed ({e}), trying next…")
+            print(f"[search] {endpoint} failed ({e}), trying next...")
             resp = None
 
     if resp is None:

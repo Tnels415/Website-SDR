@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 JSON file persistence for the business list.
 Merges new results with existing data so outreach notes are never lost.
@@ -33,7 +34,7 @@ def merge_businesses(existing: dict[str, dict], new_list: list[dict]) -> dict[st
     for biz in new_list:
         bid = biz["id"]
         if bid in merged:
-            # Back-fill enriched fields only — never overwrite user data
+            # Back-fill enriched fields only - never overwrite user data
             for field in ("email", "description", "phone", "address", "hours", "category"):
                 if not merged[bid].get(field) and biz.get(field):
                     merged[bid][field] = biz[field]
@@ -51,7 +52,7 @@ def save_businesses(businesses: dict[str, dict], filepath: str) -> None:
     data = list(businesses.values())
     with open(filepath, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
-    print(f"[storage] Saved {len(data)} businesses → {filepath}")
+    print(f"[storage] Saved {len(data)} businesses -> {filepath}")
 
 
 def businesses_to_list(businesses: dict[str, dict]) -> list[dict]:

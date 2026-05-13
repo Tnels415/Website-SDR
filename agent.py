@@ -1,12 +1,13 @@
+# -*- coding: utf-8 -*-
 """
 Local Business Discovery Agent
 --------------------------------
-Finds local businesses that have no website so you can offer to build one for them.
+Finds local businesses that have no website so you can offer to build one.
 
 Backends (auto-selected):
-  • Google Places API  — if GOOGLE_PLACES_API_KEY is set in config.py (recommended)
+  * Google Places API  - if GOOGLE_PLACES_API_KEY is set in config.py (recommended)
                          Works anywhere, returns phone numbers directly.
-  • OpenStreetMap       — free fallback, works on most home/office networks.
+  * OpenStreetMap      - free fallback, works on most home/office networks.
 
 Steps:
   1. Search for local businesses with no website
@@ -30,7 +31,7 @@ from enrich import enrich_businesses
 from storage import load_businesses, merge_businesses, save_businesses
 
 
-def _search_google(radius: int) -> list[dict]:
+def _search_google(radius):
     from search_google import search_businesses as google_search
     return google_search(
         config.SEARCH_CITY,
@@ -41,32 +42,33 @@ def _search_google(radius: int) -> list[dict]:
     )
 
 
-def _search_osm(radius: int) -> list[dict]:
+def _search_osm(radius):
     from search import search_businesses as osm_search
 
-    # Allow manually-configured lat/lon to bypass geocoding
     if config.SEARCH_LAT and config.SEARCH_LON:
         from search import build_overpass_query, parse_business, OVERPASS_ENDPOINTS
         import requests as req
         lat, lon = config.SEARCH_LAT, config.SEARCH_LON
-        print(f"[agent] Using hardcoded coords ({lat}, {lon})")
+        print("[agent] Using hardcoded coords (%s, %s)" % (lat, lon))
         query = build_overpass_query(lat, lon, radius)
-        print(f"[search] Querying Overpass API (radius={radius}m)…")
+        print("[search] Querying Overpass API (radius=%dm)..." % radius)
         resp = None
         for endpoint in OVERPASS_ENDPOINTS:
             try:
                 r = req.post(
                     endpoint,
-                    data=f"data={req.utils.quote(query)}",
-                    headers={"Content-Type": "application/x-www-form-urlencoded",
-                             "User-Agent": "LocalBusinessDiscoveryAgent/1.0"},
+                    data="data=" + req.utils.quote(query),
+                    headers={
+                        "Content-Type": "application/x-www-form-urlencoded",
+                        "User-Agent": "LocalBusinessDiscoveryAgent/1.0",
+                    },
                     timeout=90,
                 )
                 r.raise_for_status()
                 resp = r
                 break
             except Exception as e:
-                print(f"[search] {endpoint} failed: {e}")
+                print("[search] %s failed: %s" % (endpoint, e))
         if resp is None:
             raise RuntimeError("All Overpass endpoints failed.")
         elements = resp.json().get("elements", [])
@@ -87,38 +89,36 @@ def _search_osm(radius: int) -> list[dict]:
     )
 
 
-def run_agent() -> None:
+def run_agent():
     if config.SEARCH_CITY.startswith("YOUR_"):
-        sys.exit(
-            "ERROR: Please set SEARCH_CITY and SEARCH_STATE in config.py before running."
-        )
+        sys.exit("ERROR: Please set SEARCH_CITY and SEARCH_STATE in config.py before running.")
 
     use_google = bool(getattr(config, "GOOGLE_PLACES_API_KEY", None))
     backend = "Google Places API" if use_google else "OpenStreetMap"
 
-    print(f"\n{'='*60}")
-    print(f"  Local Business Discovery Agent")
-    print(f"  Location : {config.SEARCH_CITY}, {config.SEARCH_STATE}")
-    print(f"  Backend  : {backend}")
-    print(f"  Target   : ≥{config.MIN_BUSINESSES} businesses")
-    print(f"{'='*60}\n")
+    print("")
+    print("=" * 60)
+    print("  Local Business Discovery Agent")
+    print("  Location : %s, %s" % (config.SEARCH_CITY, config.SEARCH_STATE))
+    print("  Backend  : %s" % backend)
+    print("  Target   : >=%d businesses" % config.MIN_BUSINESSES)
+    print("=" * 60)
+    print("")
 
-    # ── Step 1: Search ────────────────────────────────────────────────────────
+    # Step 1: Search
     radius = config.SEARCH_RADIUS_M
-    businesses: list[dict] = []
+    businesses = []
 
-    while len(businesses) < config.MIN_BUSINESSES and radius <= 50_000:
+    while len(businesses) < config.MIN_BUSINESSES and radius <= 50000:
         try:
             businesses = _search_google(radius) if use_google else _search_osm(radius)
         except Exception as e:
-            sys.exit(f"ERROR during search: {e}")
+            sys.exit("ERROR during search: %s" % e)
 
         if len(businesses) < config.MIN_BUSINESSES:
-            new_radius = min(radius * 2, 50_000)
-            print(
-                f"[agent] Only {len(businesses)} found at {radius}m "
-                f"— widening radius to {new_radius}m…"
-            )
+            new_radius = min(radius * 2, 50000)
+            print("[agent] Only %d found at %dm - widening radius to %dm..." % (
+                len(businesses), radius, new_radius))
             radius = new_radius
 
     if not businesses:
@@ -127,17 +127,18 @@ def run_agent() -> None:
             "Check your city name and API key (if using Google) in config.py."
         )
 
-    print(f"[agent] ✓ Found {len(businesses)} businesses without websites.\n")
+    print("[agent] Found %d businesses without websites." % len(businesses))
+    print("")
 
-    # ── Step 2: Enrich (email, phone, description) ────────────────────────────
+    # Step 2: Enrich
     businesses = enrich_businesses(businesses, config.SEARCH_CITY, config.SEARCH_STATE)
 
-    # ── Step 3: Merge with existing data & save ───────────────────────────────
+    # Step 3: Merge and save
     existing = load_businesses(config.DATA_FILE)
     merged = merge_businesses(existing, businesses)
     save_businesses(merged, config.DATA_FILE)
 
-    # ── Step 4: Generate dashboard ────────────────────────────────────────────
+    # Step 4: Generate dashboard
     generate_dashboard(
         list(merged.values()),
         config.DASHBOARD_FILE,
@@ -150,12 +151,16 @@ def run_agent() -> None:
     with_phone = sum(1 for b in merged.values() if b.get("phone"))
     with_email = sum(1 for b in merged.values() if b.get("email"))
 
-    print(f"\n{'='*60}")
-    print(f"  Done!  {total} businesses ({new_count} new this run)")
-    print(f"  Phone  : {with_phone}/{total} ({with_phone*100//total if total else 0}%)")
-    print(f"  Email  : {with_email}/{total} ({with_email*100//total if total else 0}%)")
-    print(f"  Open {config.DASHBOARD_FILE} in your browser")
-    print(f"{'='*60}\n")
+    print("")
+    print("=" * 60)
+    print("  Done! %d businesses (%d new this run)" % (total, new_count))
+    pct_phone = (with_phone * 100 // total) if total else 0
+    pct_email = (with_email * 100 // total) if total else 0
+    print("  Phone : %d/%d (%d%%)" % (with_phone, total, pct_phone))
+    print("  Email : %d/%d (%d%%)" % (with_email, total, pct_email))
+    print("  Open %s in your browser" % config.DASHBOARD_FILE)
+    print("=" * 60)
+    print("")
 
 
 if __name__ == "__main__":

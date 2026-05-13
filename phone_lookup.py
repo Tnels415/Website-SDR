@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Phone number enrichment: find a phone number for a business using DuckDuckGo
 snippet extraction and directory page scraping (Yellow Pages / Yelp).
@@ -122,7 +123,7 @@ def enrich_phones(businesses: list[dict], city: str, state: str) -> list[dict]:
     several consecutive failures to avoid log spam when DDG is unavailable.
     """
     if not _ddg_ok:
-        print("[phone] ddgs not installed — skipping phone enrichment.")
+        print("[phone] ddgs not installed - skipping phone enrichment.")
         return businesses
 
     need_phone = [b for b in businesses if not b.get("phone")]
@@ -130,13 +131,13 @@ def enrich_phones(businesses: list[dict], city: str, state: str) -> list[dict]:
         print("[phone] All businesses already have phone numbers.")
         return businesses
 
-    print(f"[phone] Looking up phones for {len(need_phone)} businesses…")
+    print(f"[phone] Looking up phones for {len(need_phone)} businesses...")
     consecutive_misses = 0
 
     for biz in need_phone:
         if consecutive_misses >= _MAX_CONSECUTIVE_MISSES:
             print(
-                f"[phone] {_MAX_CONSECUTIVE_MISSES} consecutive misses — "
+                f"[phone] {_MAX_CONSECUTIVE_MISSES} consecutive misses - "
                 "DDG may be rate-limiting. Stopping phone lookup."
             )
             break
@@ -146,10 +147,10 @@ def enrich_phones(businesses: list[dict], city: str, state: str) -> list[dict]:
         if phone:
             biz["phone"] = phone
             consecutive_misses = 0
-            print(f"[phone]   ✓ {name}: {phone}")
+            print(f"[phone]   ok {name}: {phone}")
         else:
             consecutive_misses += 1
-            print(f"[phone]   – {name}: not found")
+            print(f"[phone]   - {name}: not found")
 
         time.sleep(0.5)
 

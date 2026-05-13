@@ -1,9 +1,10 @@
+# -*- coding: utf-8 -*-
 """
 Google Places API search backend.
 Finds local businesses that have no website using:
-  1. Google Geocoding API  — city name → lat/lon
-  2. Google Places Nearby Search — businesses near that location
-  3. Google Place Details  — phone, address, hours, website check
+  1. Google Geocoding API  - city name -> lat/lon
+  2. Google Places Nearby Search - businesses near that location
+  3. Google Place Details  - phone, address, hours, website check
 
 Requires: GOOGLE_PLACES_API_KEY in config.py
 Cost: well within Google's $200/month free credit for normal use.
@@ -17,7 +18,7 @@ GEOCODE_URL    = "https://maps.googleapis.com/maps/api/geocode/json"
 NEARBY_URL     = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
 DETAILS_URL    = "https://maps.googleapis.com/maps/api/place/details/json"
 
-# Place types we search for — covers most small local businesses
+# Place types we search for - covers most small local businesses
 SEARCH_TYPES = [
     "restaurant", "cafe", "bakery", "bar", "food",
     "beauty_salon", "hair_care", "spa", "gym",
@@ -151,7 +152,7 @@ def search_businesses(city: str, state: str, country: str, radius_m: int, api_ke
         raise RuntimeError(f"Google geocoding failed for '{city}, {state}'")
 
     lat, lon = coords
-    print(f"[google] Geocoded '{city}' → ({lat:.4f}, {lon:.4f})")
+    print(f"[google] Geocoded '{city}' -> ({lat:.4f}, {lon:.4f})")
 
     seen_ids: set[str] = set()
     candidates: list[dict] = []  # place_ids of businesses with no website in basic result
@@ -182,7 +183,7 @@ def search_businesses(city: str, state: str, country: str, radius_m: int, api_ke
         if len(candidates) >= 100:
             break  # plenty to work with
 
-    print(f"[google] {len(candidates)} candidate businesses found — fetching details…")
+    print(f"[google] {len(candidates)} candidate businesses found - fetching details...")
 
     businesses: list[dict] = []
     seen_names: set[str] = set()
@@ -208,12 +209,12 @@ def search_businesses(city: str, state: str, country: str, radius_m: int, api_ke
         businesses.append(biz)
 
         if (i + 1) % 10 == 0:
-            print(f"[google]   …{i+1}/{len(candidates)} processed, {len(businesses)} kept so far")
+            print(f"[google]   ...{i+1}/{len(candidates)} processed, {len(businesses)} kept so far")
 
         time.sleep(0.1)  # polite rate limiting
 
     # Sort: phone first, then alphabetical
     businesses.sort(key=lambda b: (0 if b["phone"] else 1, b["name"]))
 
-    print(f"[google] Done — {len(businesses)} businesses without websites found.")
+    print(f"[google] Done - {len(businesses)} businesses without websites found.")
     return businesses

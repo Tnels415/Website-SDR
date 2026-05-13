@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 Enrichment layer: use DuckDuckGo (no API key required) to find
 email addresses, phone numbers, and a brief description for each business.
@@ -60,7 +61,7 @@ def enrich_businesses(businesses: list[dict], city: str, state: str) -> list[dic
     Bails out early if DDG is consistently unavailable to avoid log spam.
     """
     if not _ddg_available:
-        print("[enrich] ddgs is not installed — skipping enrichment.")
+        print("[enrich] ddgs is not installed - skipping enrichment.")
         print("         Run:  pip3 install ddgs")
         return businesses
 
@@ -71,12 +72,12 @@ def enrich_businesses(businesses: list[dict], city: str, state: str) -> list[dic
         if consecutive_failures >= _MAX_CONSECUTIVE_FAILURES:
             print(
                 f"[enrich] DuckDuckGo unavailable after {_MAX_CONSECUTIVE_FAILURES} "
-                "consecutive failures — skipping remaining enrichment."
+                "consecutive failures - skipping remaining enrichment."
             )
             break
 
         name = biz["name"]
-        print(f"[enrich] ({i+1}/{len(businesses)}) {name} …")
+        print(f"[enrich] ({i+1}/{len(businesses)}) {name} ...")
         got_result = False
 
         # --- Email ---
