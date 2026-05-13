@@ -109,17 +109,21 @@ def run_agent():
     radius = config.SEARCH_RADIUS_M
     businesses = []
 
-    while len(businesses) < config.MIN_BUSINESSES and radius <= 50000:
+    while True:
         try:
             businesses = _search_google(radius) if use_google else _search_osm(radius)
         except Exception as e:
             sys.exit("ERROR during search: %s" % e)
 
-        if len(businesses) < config.MIN_BUSINESSES:
-            new_radius = min(radius * 2, 50000)
-            print("[agent] Only %d found at %dm - widening radius to %dm..." % (
-                len(businesses), radius, new_radius))
-            radius = new_radius
+        if len(businesses) >= config.MIN_BUSINESSES:
+            break
+        if radius >= 50000:
+            print("[agent] Max radius reached with %d businesses. Proceeding anyway." % len(businesses))
+            break
+        new_radius = min(radius * 2, 50000)
+        print("[agent] Only %d found at %dm - widening radius to %dm..." % (
+            len(businesses), radius, new_radius))
+        radius = new_radius
 
     if not businesses:
         sys.exit(
