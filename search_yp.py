@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-Yellow Pages scraping backend.
-Finds local businesses that have NO website listed on Yellow Pages.
-The presence/absence of the "Visit Website" link on each listing card
-is a reliable indicator - businesses without a link are prime prospects.
+Manta.com scraping backend.
+Finds local businesses that have no website using Manta's small-business directory.
+Manta is server-side rendered and specifically tracks businesses without websites.
 
 No API key or signup required.
 Dependencies: requests, beautifulsoup4 (both already in requirements.txt)
@@ -17,16 +16,16 @@ from typing import Optional
 import requests
 from bs4 import BeautifulSoup
 
-YP_BASE_URL = "https://www.yellowpages.com/search"
+MANTA_SEARCH = "https://www.manta.com/search"
 
-YP_CATEGORIES = [
-    "restaurants", "hair salons", "auto repair", "plumbers",
-    "electricians", "dentists", "nail salons", "barbers",
-    "dry cleaners", "florists", "pet grooming", "landscaping",
-    "photographers", "caterers", "accountants", "insurance agents",
-    "lawyers", "chiropractors", "massage therapy", "gyms",
-    "bakeries", "laundry", "alterations", "handyman",
-    "painting contractors", "roofing contractors",
+BUSINESS_TYPES = [
+    "restaurants", "hair salon", "nail salon", "barber",
+    "auto repair", "plumber", "electrician", "dentist",
+    "chiropractor", "massage", "florist", "pet grooming",
+    "landscaping", "cleaning service", "catering",
+    "accountant", "insurance agent", "lawyer",
+    "gym", "bakery", "dry cleaning", "handyman",
+    "real estate", "photographer", "auto body",
 ]
 
 HEADERS = {
@@ -37,7 +36,7 @@ HEADERS = {
     ),
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
-    "Referer": "https://www.yellowpages.com/",
+    "Referer": "https://www.manta.com/",
 }
 
 PHONE_RE = re.compile(
@@ -47,7 +46,7 @@ PHONE_RE = re.compile(
 )
 
 MAX_BUSINESSES = 100
-MAX_PAGES_PER_CATEGORY = 5
+MAX_PAGES_PER_TYPE = 4
 
 
 def _normalise_phone(raw: str) -> Optional[str]:
@@ -60,77 +59,102 @@ def _normalise_phone(raw: str) -> Optional[str]:
 
 
 def _id_for(name: str, city: str) -> str:
-    slug_name = re.sub(r"\W+", "_", name.lower()).strip("_")
-    slug_city = city.lower().replace(" ", "_")
-    return "yp_%s_%s" % (slug_name, slug_city)
+    slug = re.sub(r"\W+", "_", name.lower()).strip("_")
+    city_slug = city.lower().replace(" ", "_")
+    return "yp_%s_%s" % (slug, city_slug)
 
 
-def _fetch_page(category: str, city: str, state: str, page: int, session: requests.Session) -> Optional[BeautifulSoup]:
+def _fetch_page(session: requests.Session, btype: str, city: str, state: str, page: int) -> Optional[BeautifulSoup]:
     time.sleep(random.uniform(1.5, 2.5))
     params = {
-        "search_terms": category,
-        "geo_location_terms": "%s, %s" % (city, state),
+        "search_source": "nav",
+        "search[name]": btype,
+        "search[location]": "%s, %s" % (city, state),
     }
     if page > 1:
         params["page"] = str(page)
     try:
-        resp = session.get(YP_BASE_URL, params=params, headers=HEADERS, timeout=15)
+        resp = session.get(MANTA_SEARCH, params=params, headers=HEADERS, timeout=15)
         if resp.status_code != 200:
-            print("[yp]   HTTP %d for category '%s' page %d" % (resp.status_code, category, page))
+            print("[manta]   HTTP %d for '%s' page %d" % (resp.status_code, btype, page))
             return None
         return BeautifulSoup(resp.text, "html.parser")
     except Exception as e:
-        print("[yp]   Request failed: %s" % e)
+        print("[manta]   Request failed: %s" % e)
         return None
 
 
-def _parse_card(card, city: str) -> Optional[dict]:
-    # Skip businesses that already have a website listed
-    if card.find("a", class_="track-visit-website"):
+def _has_website(card: BeautifulSoup) -> bool:
+    """Return True if the card contains a link to the business's own website."""
+    for a in card.find_all("a", href=True):
+        href = a["href"]
+        if href.startswith("http") and "manta.com" not in href:
+            return True
+    return False
+
+
+def _parse_card(card: BeautifulSoup, city: str) -> Optional[dict]:
+    # Skip businesses that have their own website linked in the card
+    if _has_website(card):
         return None
 
-    name_tag = card.find("a", class_="business-name")
-    if not name_tag:
-        return None
-    name = name_tag.get_text(strip=True)
+    # Business name — try several heading/link patterns
+    name = ""
+    for selector in [
+        lambda c: c.find("h2"),
+        lambda c: c.find("h3"),
+        lambda c: c.find("a", class_=lambda x: x and "name" in x.lower()),
+        lambda c: c.find("strong"),
+    ]:
+        tag = selector(card)
+        if tag:
+            name = tag.get_text(strip=True)
+            if name:
+                break
     if not name:
         return None
 
-    # Phone number
+    # Phone — prefer tel: href links (most reliable)
     phone = ""
-    phone_div = card.find("div", class_="phones")
-    if phone_div:
-        raw = phone_div.get_text(strip=True)
+    tel = card.find("a", href=lambda h: h and h.startswith("tel:"))
+    if tel:
+        raw = tel["href"].replace("tel:", "").replace("%20", "").strip()
         phone = _normalise_phone(raw) or ""
+    if not phone:
+        text = card.get_text(" ", strip=True)
+        for match in PHONE_RE.findall(text):
+            phone = _normalise_phone(match) or ""
+            if phone:
+                break
 
     # Address
     address = ""
-    adr = card.find("p", class_="adr")
-    if adr:
-        street = adr.find("span", class_="street-address")
-        locality = adr.find("span", class_="locality")
-        parts = []
-        if street:
-            parts.append(street.get_text(strip=True))
-        if locality:
-            parts.append(locality.get_text(strip=True))
-        address = ", ".join(parts)
+    addr_tag = card.find("address")
+    if addr_tag:
+        address = addr_tag.get_text(", ", strip=True)
+    if not address:
+        # Look for a div/span containing the city name as a fallback
+        for tag in card.find_all(["span", "div", "p"]):
+            txt = tag.get_text(strip=True)
+            if city.lower() in txt.lower() and len(txt) < 120:
+                address = txt
+                break
 
-    # Category
+    # Category — first non-empty link text that isn't the business name
     category = ""
-    cats_div = card.find("div", class_="categories")
-    if cats_div:
-        first_cat = cats_div.find("a")
-        if first_cat:
-            category = first_cat.get_text(strip=True)
+    for a in card.find_all("a", href=True):
+        txt = a.get_text(strip=True)
+        if txt and txt != name and len(txt) < 40:
+            category = txt
+            break
 
     return {
         "id": _id_for(name, city),
         "name": name,
-        "category": category,
+        "category": category or "business",
         "phone": phone,
         "email": "",
-        "address": address,
+        "address": address or city,
         "hours": "",
         "lat": None,
         "lon": None,
@@ -138,43 +162,58 @@ def _parse_card(card, city: str) -> Optional[dict]:
         "status": "not_contacted",
         "outreach": [],
         "notes": "",
-        "source": "yellowpages",
+        "source": "manta",
     }
+
+
+def _find_cards(soup: BeautifulSoup) -> list:
+    """Try several common card container selectors."""
+    for selector, kwargs in [
+        ("article", {}),
+        ("div", {"class_": lambda c: c and "result" in c.lower()}),
+        ("li", {"class_": lambda c: c and "listing" in c.lower()}),
+        ("div", {"class_": lambda c: c and "card" in c.lower()}),
+        ("section", {"class_": lambda c: c and "business" in c.lower()}),
+    ]:
+        cards = soup.find_all(selector, **kwargs)
+        if cards:
+            return cards
+    return []
 
 
 def search_businesses(city: str, state: str, country: str, radius_m: int) -> list:
     """
-    Scrape Yellow Pages for local businesses without a website listing.
+    Scrape Manta.com for local businesses without a website.
+    radius_m is accepted for interface compatibility but not used (Manta searches by city).
     Returns a list of business dicts sorted with phone-bearing entries first.
-    radius_m is accepted for interface compatibility but not used (YP searches by city).
     """
-    print("[yp] Searching Yellow Pages for businesses in %s, %s..." % (city, state))
+    print("[manta] Searching Manta.com for businesses in %s, %s..." % (city, state))
 
     session = requests.Session()
     businesses = []
     seen_names: set = set()
-    total_cards_checked = 0
+    total_checked = 0
     total_skipped_website = 0
 
-    for cat in YP_CATEGORIES:
+    for btype in BUSINESS_TYPES:
         if len(businesses) >= MAX_BUSINESSES:
             break
 
-        cat_new = 0
-        for page in range(1, MAX_PAGES_PER_CATEGORY + 1):
-            soup = _fetch_page(cat, city, state, page, session)
+        btype_new = 0
+        for page in range(1, MAX_PAGES_PER_TYPE + 1):
+            soup = _fetch_page(session, btype, city, state, page)
             if soup is None:
                 break
 
-            cards = soup.find_all("div", class_="result")
+            cards = _find_cards(soup)
             if not cards:
+                print("[manta]   No cards found for '%s' page %d (HTML may have changed)" % (btype, page))
                 break
 
             page_new = 0
             for card in cards:
-                total_cards_checked += 1
-                # Check for website before parsing (fast path)
-                if card.find("a", class_="track-visit-website"):
+                total_checked += 1
+                if _has_website(card):
                     total_skipped_website += 1
                     continue
 
@@ -187,23 +226,19 @@ def search_businesses(city: str, state: str, country: str, radius_m: int) -> lis
                     continue
                 seen_names.add(key)
                 businesses.append(biz)
-                cat_new += 1
+                btype_new += 1
                 page_new += 1
 
             if page_new == 0:
-                break  # no new results on this page, stop paginating this category
+                break
 
-        if cat_new > 0:
-            print("[yp]   %s: %d businesses without websites" % (cat, cat_new))
+        if btype_new > 0:
+            print("[manta]   %s: %d businesses without websites" % (btype, btype_new))
 
     businesses.sort(key=lambda b: (0 if b["phone"] else 1, b["name"]))
-
-    pct_no_site = (
-        (len(businesses) * 100 // total_cards_checked) if total_cards_checked else 0
-    )
     print(
-        "[yp] Done - %d businesses without websites found "
-        "(%d of %d listings had no website, %d skipped for having one)."
-        % (len(businesses), len(businesses), total_cards_checked, total_skipped_website)
+        "[manta] Done - %d businesses found "
+        "(%d cards checked, %d had websites)."
+        % (len(businesses), total_checked, total_skipped_website)
     )
     return businesses

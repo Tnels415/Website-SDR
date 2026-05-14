@@ -104,13 +104,20 @@ def run_agent():
         sys.exit("ERROR: Please set SEARCH_CITY and SEARCH_STATE in config.py before running.")
 
     use_google = bool(getattr(config, "GOOGLE_PLACES_API_KEY", None))
-    backend = "Google Places API" if use_google else "Yellow Pages + OpenStreetMap (free)"
+    coords_hardcoded = bool(getattr(config, "SEARCH_LAT", None) and getattr(config, "SEARCH_LON", None))
+
+    if use_google:
+        backend = "Google Places API"
+    else:
+        backend = "Manta.com + OpenStreetMap (free)"
 
     print("")
     print("=" * 60)
     print("  Local Business Discovery Agent")
     print("  Location : %s, %s" % (config.SEARCH_CITY, config.SEARCH_STATE))
     print("  Backend  : %s" % backend)
+    if coords_hardcoded:
+        print("  Coords   : %.4f, %.4f (hardcoded)" % (config.SEARCH_LAT, config.SEARCH_LON))
     print("  Target   : >=%d businesses" % config.MIN_BUSINESSES)
     print("=" * 60)
     print("")
@@ -126,28 +133,34 @@ def run_agent():
             except Exception as e:
                 sys.exit("ERROR during Google search: %s" % e)
         else:
-            # Stage 1: Yellow Pages
+            # Stage 1: Manta.com directory scraper
             try:
                 businesses = _search_yp(radius)
-                print("[agent] Yellow Pages: %d businesses found." % len(businesses))
+                print("[agent] Manta: %d businesses found." % len(businesses))
             except Exception as e:
-                print("[agent] Yellow Pages failed (%s), falling back to OSM..." % e)
+                print("[agent] Manta failed (%s), falling back to OSM..." % e)
                 businesses = []
 
             # Stage 2: OSM supplement if still short
             if len(businesses) < config.MIN_BUSINESSES:
+                print("[agent] Supplementing with OpenStreetMap/Overpass...")
                 try:
                     osm_biz = _search_osm(radius)
-                    yp_names = {b["name"].lower() for b in businesses}
+                    manta_names = {b["name"].lower() for b in businesses}
                     added = 0
                     for b in osm_biz:
-                        if b["name"].lower() not in yp_names:
+                        if b["name"].lower() not in manta_names:
                             businesses.append(b)
                             added += 1
                     if added:
                         print("[agent] OSM supplement: +%d businesses (total %d)." % (added, len(businesses)))
+                    elif not osm_biz:
+                        print("[agent] OSM returned 0 results. "
+                              "If this keeps happening, check that SEARCH_LAT/LON "
+                              "are set in config.py.")
                 except Exception as e:
-                    print("[agent] OSM also failed: %s" % e)
+                    print("[agent] OSM failed: %s" % e)
+                    print("[agent] Tip: set SEARCH_LAT and SEARCH_LON in config.py to bypass geocoding.")
 
         if len(businesses) >= config.MIN_BUSINESSES:
             break
@@ -161,8 +174,11 @@ def run_agent():
 
     if not businesses:
         sys.exit(
-            "ERROR: No businesses found. "
-            "Check your city name in config.py."
+            "ERROR: No businesses found.\n"
+            "Possible fixes:\n"
+            "  1. Ensure SEARCH_LAT and SEARCH_LON are set in config.py\n"
+            "  2. Check your internet connection\n"
+            "  3. Try running again (network endpoints may be temporarily down)"
         )
 
     print("[agent] Found %d businesses without websites." % len(businesses))

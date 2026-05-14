@@ -32,5 +32,5 @@ GOOGLE_PLACES_API_KEY = ""
 #  Leave as None to geocode automatically.
 #  To find lat/lon: right-click on Google Maps, click "What's here?"
 # -----------------------------------------------
-SEARCH_LAT = None   # e.g. 37.7799
-SEARCH_LON = None   # e.g. -121.9780
+SEARCH_LAT = 37.7799   # San Ramon, CA
+SEARCH_LON = -121.9780  # San Ramon, CA
