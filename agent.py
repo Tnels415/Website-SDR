@@ -179,31 +179,36 @@ def run_agent():
     # Step 2: Enrich
     businesses = enrich_businesses(businesses, config.SEARCH_CITY, config.SEARCH_STATE)
 
+    # Drop businesses that still have no phone after enrichment
+    before = len(businesses)
+    businesses = [b for b in businesses if b.get("phone")]
+    dropped = before - len(businesses)
+    if dropped:
+        print("[agent] Dropped %d businesses with no phone number." % dropped)
+
     # Step 3: Merge and save
     existing = load_businesses(config.DATA_FILE)
     merged = merge_businesses(existing, businesses)
     save_businesses(merged, config.DATA_FILE)
 
-    # Step 4: Generate dashboard
+    # Step 4: Generate dashboard — only businesses with a phone number
+    dashboard_biz = [b for b in merged.values() if b.get("phone")]
     generate_dashboard(
-        list(merged.values()),
+        dashboard_biz,
         config.DASHBOARD_FILE,
         config.SEARCH_CITY,
         config.SEARCH_STATE,
     )
 
     total = len(merged)
+    shown = len(dashboard_biz)
     new_count = total - len(existing)
-    with_phone = sum(1 for b in merged.values() if b.get("phone"))
-    with_email = sum(1 for b in merged.values() if b.get("email"))
+    with_email = sum(1 for b in dashboard_biz if b.get("email"))
 
     print("")
     print("=" * 60)
-    print("  Done! %d businesses (%d new this run)" % (total, new_count))
-    pct_phone = (with_phone * 100 // total) if total else 0
-    pct_email = (with_email * 100 // total) if total else 0
-    print("  Phone : %d/%d (%d%%)" % (with_phone, total, pct_phone))
-    print("  Email : %d/%d (%d%%)" % (with_email, total, pct_email))
+    print("  Done! %d businesses shown (%d new this run)" % (shown, new_count))
+    print("  Email : %d/%d have email addresses" % (with_email, shown))
     print("  Open %s in your browser" % config.DASHBOARD_FILE)
     print("=" * 60)
     print("")
