@@ -5,9 +5,9 @@ Local Business Discovery Agent
 Finds local businesses that have no website so you can offer to build one.
 
 Backends (auto-selected):
-  * Google Places API      - if GOOGLE_PLACES_API_KEY is set in config.py
-  * Yellow Pages scraping  - free, no signup, phone numbers included (default)
-  * OpenStreetMap          - free fallback used to supplement Yellow Pages
+  * Google Places API  - if GOOGLE_PLACES_API_KEY is set in config.py
+  * OpenStreetMap      - free default; set SEARCH_LAT/LON in config.py
+                         to skip geocoding (fastest, most reliable)
 
 Steps:
   1. Search for local businesses with no website
@@ -39,16 +39,6 @@ def _search_google(radius):
         config.SEARCH_COUNTRY,
         radius,
         config.GOOGLE_PLACES_API_KEY,
-    )
-
-
-def _search_yp(radius):
-    from search_yp import search_businesses as yp_search
-    return yp_search(
-        config.SEARCH_CITY,
-        config.SEARCH_STATE,
-        config.SEARCH_COUNTRY,
-        radius,
     )
 
 
@@ -106,10 +96,7 @@ def run_agent():
     use_google = bool(getattr(config, "GOOGLE_PLACES_API_KEY", None))
     coords_hardcoded = bool(getattr(config, "SEARCH_LAT", None) and getattr(config, "SEARCH_LON", None))
 
-    if use_google:
-        backend = "Google Places API"
-    else:
-        backend = "Manta.com + OpenStreetMap (free)"
+    backend = "Google Places API" if use_google else "OpenStreetMap (free)"
 
     print("")
     print("=" * 60)
@@ -133,34 +120,12 @@ def run_agent():
             except Exception as e:
                 sys.exit("ERROR during Google search: %s" % e)
         else:
-            # Stage 1: Manta.com directory scraper
             try:
-                businesses = _search_yp(radius)
-                print("[agent] Manta: %d businesses found." % len(businesses))
+                businesses = _search_osm(radius)
             except Exception as e:
-                print("[agent] Manta failed (%s), falling back to OSM..." % e)
+                print("[agent] OSM failed: %s" % e)
+                print("[agent] Tip: set SEARCH_LAT and SEARCH_LON in config.py to bypass geocoding.")
                 businesses = []
-
-            # Stage 2: OSM supplement if still short
-            if len(businesses) < config.MIN_BUSINESSES:
-                print("[agent] Supplementing with OpenStreetMap/Overpass...")
-                try:
-                    osm_biz = _search_osm(radius)
-                    manta_names = {b["name"].lower() for b in businesses}
-                    added = 0
-                    for b in osm_biz:
-                        if b["name"].lower() not in manta_names:
-                            businesses.append(b)
-                            added += 1
-                    if added:
-                        print("[agent] OSM supplement: +%d businesses (total %d)." % (added, len(businesses)))
-                    elif not osm_biz:
-                        print("[agent] OSM returned 0 results. "
-                              "If this keeps happening, check that SEARCH_LAT/LON "
-                              "are set in config.py.")
-                except Exception as e:
-                    print("[agent] OSM failed: %s" % e)
-                    print("[agent] Tip: set SEARCH_LAT and SEARCH_LON in config.py to bypass geocoding.")
 
         if len(businesses) >= config.MIN_BUSINESSES:
             break
@@ -176,9 +141,9 @@ def run_agent():
         sys.exit(
             "ERROR: No businesses found.\n"
             "Possible fixes:\n"
-            "  1. Ensure SEARCH_LAT and SEARCH_LON are set in config.py\n"
-            "  2. Check your internet connection\n"
-            "  3. Try running again (network endpoints may be temporarily down)"
+            "  1. Confirm SEARCH_LAT and SEARCH_LON are set in config.py\n"
+            "  2. Check your internet connection (Overpass API must be reachable)\n"
+            "  3. Try running again — Overpass endpoints are occasionally slow"
         )
 
     print("[agent] Found %d businesses without websites." % len(businesses))
