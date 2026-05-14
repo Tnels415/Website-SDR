@@ -6,8 +6,8 @@ Finds local businesses that have no website so you can offer to build one.
 
 Backends (auto-selected):
   * Google Places API  - if GOOGLE_PLACES_API_KEY is set in config.py
-  * OpenStreetMap      - free default; set SEARCH_LAT/LON in config.py
-                         to skip geocoding (fastest, most reliable)
+  * DuckDuckGo search  - free default; parses local business listings
+  * OpenStreetMap      - free fallback if DDG returns too few results
 
 Steps:
   1. Search for local businesses with no website
@@ -39,6 +39,16 @@ def _search_google(radius):
         config.SEARCH_COUNTRY,
         radius,
         config.GOOGLE_PLACES_API_KEY,
+    )
+
+
+def _search_ddg(radius):
+    from search_ddg import search_businesses as ddg_search
+    return ddg_search(
+        config.SEARCH_CITY,
+        config.SEARCH_STATE,
+        config.SEARCH_COUNTRY,
+        radius,
     )
 
 
@@ -96,7 +106,7 @@ def run_agent():
     use_google = bool(getattr(config, "GOOGLE_PLACES_API_KEY", None))
     coords_hardcoded = bool(getattr(config, "SEARCH_LAT", None) and getattr(config, "SEARCH_LON", None))
 
-    backend = "Google Places API" if use_google else "OpenStreetMap (free)"
+    backend = "Google Places API" if use_google else "DuckDuckGo + OpenStreetMap (free)"
 
     print("")
     print("=" * 60)
@@ -120,12 +130,29 @@ def run_agent():
             except Exception as e:
                 sys.exit("ERROR during Google search: %s" % e)
         else:
+            # Stage 1: DuckDuckGo — works on any home/office network, no API key
             try:
-                businesses = _search_osm(radius)
+                businesses = _search_ddg(radius)
+                print("[agent] DDG: %d businesses found." % len(businesses))
             except Exception as e:
-                print("[agent] OSM failed: %s" % e)
-                print("[agent] Tip: set SEARCH_LAT and SEARCH_LON in config.py to bypass geocoding.")
+                print("[agent] DDG search failed (%s)." % e)
                 businesses = []
+
+            # Stage 2: OSM supplement if DDG came up short
+            if len(businesses) < config.MIN_BUSINESSES:
+                print("[agent] Supplementing with OpenStreetMap/Overpass...")
+                try:
+                    osm_biz = _search_osm(radius)
+                    ddg_names = {b["name"].lower() for b in businesses}
+                    added = 0
+                    for b in osm_biz:
+                        if b["name"].lower() not in ddg_names:
+                            businesses.append(b)
+                            added += 1
+                    if added:
+                        print("[agent] OSM added %d more businesses (total %d)." % (added, len(businesses)))
+                except Exception as e:
+                    print("[agent] OSM also failed: %s" % e)
 
         if len(businesses) >= config.MIN_BUSINESSES:
             break

@@ -70,22 +70,22 @@ def geocode_city(city: str, state: str, country: str) -> Optional[tuple[float, f
 
 
 def build_overpass_query(lat: float, lon: float, radius_m: int) -> str:
-    """Build an Overpass QL query for named businesses without a website tag."""
+    """Build an Overpass QL query for named local businesses near lat/lon."""
     tag_unions = []
     for tag in BUSINESS_TAGS:
         tag_unions.append(
-            f'  node["{tag}"]["name"][!"website"](around:{radius_m},{lat},{lon});'
+            '  node["%s"]["name"](around:%d,%.6f,%.6f);' % (tag, radius_m, lat, lon)
         )
         tag_unions.append(
-            f'  way["{tag}"]["name"][!"website"](around:{radius_m},{lat},{lon});'
+            '  way["%s"]["name"](around:%d,%.6f,%.6f);' % (tag, radius_m, lat, lon)
         )
 
     query_body = "\n".join(tag_unions)
-    return f"""[out:json][timeout:60];
+    return """[out:json][timeout:60];
 (
-{query_body}
+%s
 );
-out body center;"""
+out body center;""" % query_body
 
 
 def parse_business(element: dict) -> Optional[dict]:
