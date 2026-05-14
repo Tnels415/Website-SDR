@@ -207,6 +207,12 @@ function loadState() {{
     if (raw) state = JSON.parse(raw);
   }} catch(e) {{ state = {{}}; }}
   mergeSeed(SEED_DATA);
+  // Remove any businesses without a phone number (from old runs or imports)
+  let cleaned = false;
+  for (const id of Object.keys(state)) {{
+    if (!state[id].phone) {{ delete state[id]; cleaned = true; }}
+  }}
+  if (cleaned) persist();
 }}
 
 function mergeSeed(list) {{
@@ -229,7 +235,7 @@ function persist() {{
 }}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-function allBiz() {{ return Object.values(state); }}
+function allBiz() {{ return Object.values(state).filter(b => b.phone); }}
 
 function statusLabel(s) {{
   return {{not_contacted:'Not Contacted',contacted:'Contacted — No Response',working:'Working With'}}[s] || s;
