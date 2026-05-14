@@ -14,7 +14,12 @@ import time
 from typing import Optional
 
 import requests
-from bs4 import BeautifulSoup
+
+try:
+    from bs4 import BeautifulSoup
+    _bs4_ok = True
+except ImportError:
+    _bs4_ok = False
 
 MANTA_SEARCH = "https://www.manta.com/search"
 
@@ -187,6 +192,11 @@ def search_businesses(city: str, state: str, country: str, radius_m: int) -> lis
     radius_m is accepted for interface compatibility but not used (Manta searches by city).
     Returns a list of business dicts sorted with phone-bearing entries first.
     """
+    if not _bs4_ok:
+        print("[manta] beautifulsoup4 is not installed.")
+        print("[manta] Fix: run  pip3 install beautifulsoup4  then re-run the agent.")
+        return []
+
     print("[manta] Searching Manta.com for businesses in %s, %s..." % (city, state))
 
     session = requests.Session()
