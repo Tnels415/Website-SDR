@@ -18,12 +18,13 @@ DATA_FILE       = "businesses.json"
 DASHBOARD_FILE  = "dashboard.html"
 
 # -----------------------------------------------
-#  GOOGLE PLACES API KEY (recommended)
-#  Get a free key at: console.cloud.google.com
-#  Enable "Places API" and "Geocoding API"
-#  Paste your key below (must be inside the quotes).
+#  GOOGLE PLACES API KEY (optional)
+#  Leave as "" to use the free Yellow Pages + OpenStreetMap backends
+#  (no signup or API key needed - this is the default).
+#  To switch to Google Places: get a key at console.cloud.google.com,
+#  enable "Places API" and "Geocoding API", then paste it below.
 # -----------------------------------------------
-GOOGLE_PLACES_API_KEY = "AIzaSyA_Tor-6fb8EVp6sXICH3h1bj23s1S06fs"
+GOOGLE_PLACES_API_KEY = ""
 
 # -----------------------------------------------
 #  OPTIONAL: hardcode your city coordinates

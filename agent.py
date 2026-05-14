@@ -5,9 +5,9 @@ Local Business Discovery Agent
 Finds local businesses that have no website so you can offer to build one.
 
 Backends (auto-selected):
-  * Google Places API  - if GOOGLE_PLACES_API_KEY is set in config.py (recommended)
-                         Works anywhere, returns phone numbers directly.
-  * OpenStreetMap      - free fallback, works on most home/office networks.
+  * Google Places API      - if GOOGLE_PLACES_API_KEY is set in config.py
+  * Yellow Pages scraping  - free, no signup, phone numbers included (default)
+  * OpenStreetMap          - free fallback used to supplement Yellow Pages
 
 Steps:
   1. Search for local businesses with no website
@@ -39,6 +39,16 @@ def _search_google(radius):
         config.SEARCH_COUNTRY,
         radius,
         config.GOOGLE_PLACES_API_KEY,
+    )
+
+
+def _search_yp(radius):
+    from search_yp import search_businesses as yp_search
+    return yp_search(
+        config.SEARCH_CITY,
+        config.SEARCH_STATE,
+        config.SEARCH_COUNTRY,
+        radius,
     )
 
 
@@ -94,7 +104,7 @@ def run_agent():
         sys.exit("ERROR: Please set SEARCH_CITY and SEARCH_STATE in config.py before running.")
 
     use_google = bool(getattr(config, "GOOGLE_PLACES_API_KEY", None))
-    backend = "Google Places API" if use_google else "OpenStreetMap"
+    backend = "Google Places API" if use_google else "Yellow Pages + OpenStreetMap (free)"
 
     print("")
     print("=" * 60)
@@ -110,10 +120,34 @@ def run_agent():
     businesses = []
 
     while True:
-        try:
-            businesses = _search_google(radius) if use_google else _search_osm(radius)
-        except Exception as e:
-            sys.exit("ERROR during search: %s" % e)
+        if use_google:
+            try:
+                businesses = _search_google(radius)
+            except Exception as e:
+                sys.exit("ERROR during Google search: %s" % e)
+        else:
+            # Stage 1: Yellow Pages
+            try:
+                businesses = _search_yp(radius)
+                print("[agent] Yellow Pages: %d businesses found." % len(businesses))
+            except Exception as e:
+                print("[agent] Yellow Pages failed (%s), falling back to OSM..." % e)
+                businesses = []
+
+            # Stage 2: OSM supplement if still short
+            if len(businesses) < config.MIN_BUSINESSES:
+                try:
+                    osm_biz = _search_osm(radius)
+                    yp_names = {b["name"].lower() for b in businesses}
+                    added = 0
+                    for b in osm_biz:
+                        if b["name"].lower() not in yp_names:
+                            businesses.append(b)
+                            added += 1
+                    if added:
+                        print("[agent] OSM supplement: +%d businesses (total %d)." % (added, len(businesses)))
+                except Exception as e:
+                    print("[agent] OSM also failed: %s" % e)
 
         if len(businesses) >= config.MIN_BUSINESSES:
             break
@@ -128,7 +162,7 @@ def run_agent():
     if not businesses:
         sys.exit(
             "ERROR: No businesses found. "
-            "Check your city name and API key (if using Google) in config.py."
+            "Check your city name in config.py."
         )
 
     print("[agent] Found %d businesses without websites." % len(businesses))
