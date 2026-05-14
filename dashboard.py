@@ -93,6 +93,7 @@ HTML_TEMPLATE = """\
   .status-not_contacted{{background:#1e3a5f;color:#7dd3fc}}
   .status-contacted{{background:#3b2a0c;color:#fbbf24}}
   .status-working{{background:#14532d;color:#86efac}}
+  .status-already_has_website{{background:#2d1515;color:#fca5a5}}
 
   /* modal */
   .modal-backdrop{{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;align-items:center;justify-content:center}}
@@ -134,7 +135,8 @@ HTML_TEMPLATE = """\
   <div class="tab active" data-tab="not_contacted" onclick="switchTab(this)">Not Contacted <span class="badge" id="badge-not_contacted">0</span></div>
   <div class="tab" data-tab="contacted" onclick="switchTab(this)">Contacted — No Response <span class="badge" id="badge-contacted">0</span></div>
   <div class="tab" data-tab="working" onclick="switchTab(this)">Working With <span class="badge" id="badge-working">0</span></div>
-  <div class="tab" data-tab="all" onclick="switchTab(this)">All Businesses</div>
+  <div class="tab" data-tab="already_has_website" onclick="switchTab(this)">Already Has Website <span class="badge" id="badge-already_has_website">0</span></div>
+  <div class="tab" data-tab="all" onclick="switchTab(this)">All Active</div>
 </div>
 
 <div class="toolbar">
@@ -238,7 +240,12 @@ function persist() {{
 function allBiz() {{ return Object.values(state).filter(b => b.phone); }}
 
 function statusLabel(s) {{
-  return {{not_contacted:'Not Contacted',contacted:'Contacted — No Response',working:'Working With'}}[s] || s;
+  return {{
+    not_contacted:'Not Contacted',
+    contacted:'Contacted — No Response',
+    working:'Working With',
+    already_has_website:'Already Has Website',
+  }}[s] || s;
 }}
 
 function outreachTypeColor(t) {{
@@ -256,21 +263,22 @@ function updateStats() {{
   const nc  = all.filter(b=>b.status==='not_contacted').length;
   const ct  = all.filter(b=>b.status==='contacted').length;
   const wk  = all.filter(b=>b.status==='working').length;
+  const hw  = all.filter(b=>b.status==='already_has_website').length;
   const withEmail = all.filter(b=>b.email).length;
-  const withPhone = all.filter(b=>b.phone).length;
 
   document.getElementById('statsBar').innerHTML = `
     <div class="stat-chip"><div class="num">${{all.length}}</div><div class="label">Total Found</div></div>
     <div class="stat-chip"><div class="num" style="color:var(--accent)">${{nc}}</div><div class="label">Not Contacted</div></div>
     <div class="stat-chip"><div class="num" style="color:var(--yellow)">${{ct}}</div><div class="label">No Response</div></div>
     <div class="stat-chip"><div class="num" style="color:var(--green)">${{wk}}</div><div class="label">Working With</div></div>
-    <div class="stat-chip"><div class="num" style="color:var(--purple)">${{withPhone}}</div><div class="label">Have Phone</div></div>
+    <div class="stat-chip"><div class="num" style="color:var(--red)">${{hw}}</div><div class="label">Has Website</div></div>
     <div class="stat-chip"><div class="num" style="color:var(--orange)">${{withEmail}}</div><div class="label">Have Email</div></div>
   `;
 
   document.getElementById('badge-not_contacted').textContent = nc;
   document.getElementById('badge-contacted').textContent = ct;
   document.getElementById('badge-working').textContent = wk;
+  document.getElementById('badge-already_has_website').textContent = hw;
 }}
 
 // ── Tabs ─────────────────────────────────────────────────────────────────────
@@ -284,7 +292,12 @@ function switchTab(el) {{
 // ── Grid rendering ───────────────────────────────────────────────────────────
 function filteredBiz() {{
   let list = allBiz();
-  if (currentTab !== 'all') list = list.filter(b=>b.status===currentTab);
+  if (currentTab === 'all') {{
+    // "All Active" excludes businesses already confirmed to have a website
+    list = list.filter(b=>b.status!=='already_has_website');
+  }} else {{
+    list = list.filter(b=>b.status===currentTab);
+  }}
 
   const q = document.getElementById('searchInput').value.toLowerCase();
   if (q) {{
@@ -319,7 +332,12 @@ function renderGrid() {{
 }}
 
 function cardHTML(b) {{
-  const statusClass = b.status==='not_contacted'?'status-not_contacted':b.status==='contacted'?'status-contacted':'status-working';
+  const statusClass = {{
+    not_contacted:'status-not_contacted',
+    contacted:'status-contacted',
+    working:'status-working',
+    already_has_website:'status-already_has_website',
+  }}[b.status] || 'status-not_contacted';
 
   const phoneRow = b.phone
     ? `<div class="info-row"><span class="icon">📞</span><span class="val"><a href="tel:${{esc(b.phone)}}">${{esc(b.phone)}}</a></span></div>`
@@ -355,7 +373,7 @@ function cardHTML(b) {{
   const outreachCount = (b.outreach||[]).length;
   const countLabel = outreachCount===0 ? 'No outreach yet' : `${{outreachCount}} outreach contact${{outreachCount>1?'s':''}}`;
 
-  const statusOptions = ['not_contacted','contacted','working']
+  const statusOptions = ['not_contacted','contacted','working','already_has_website']
     .map(s=>`<option value="${{s}}" ${{b.status===s?'selected':''}}>${{statusLabel(s)}}</option>`)
     .join('');
 
